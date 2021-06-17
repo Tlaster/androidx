@@ -282,9 +282,10 @@ public fun <T : Any> Flow<PagingData<T>>.collectAsLazyPagingItems(): LazyPagingI
  */
 public fun <T : Any> LazyListScope.items(
     lazyPagingItems: LazyPagingItems<T>,
+    key: ((index: Int) -> Any)? = null,
     itemContent: @Composable LazyItemScope.(value: T?) -> Unit
 ) {
-    items(lazyPagingItems.itemCount) { index ->
+    items(lazyPagingItems.itemCount, key = key) { index ->
         itemContent(lazyPagingItems.getAsState(index).value)
     }
 }
@@ -304,9 +305,10 @@ public fun <T : Any> LazyListScope.items(
  */
 public fun <T : Any> LazyListScope.itemsIndexed(
     lazyPagingItems: LazyPagingItems<T>,
+    key: ((index: Int) -> Any)? = null,
     itemContent: @Composable LazyItemScope.(index: Int, value: T?) -> Unit
 ) {
-    items(lazyPagingItems.itemCount) { index ->
+    items(lazyPagingItems.itemCount, key = key) { index ->
         itemContent(index, lazyPagingItems.getAsState(index).value)
     }
 }
