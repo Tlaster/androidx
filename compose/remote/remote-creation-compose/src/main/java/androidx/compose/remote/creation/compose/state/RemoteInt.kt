@@ -64,38 +64,61 @@ internal constructor(
     cacheKey: RemoteStateCacheKey,
     internal val arrayProvider: (creationState: RemoteComposeCreationState) -> LongArray,
 ) : BaseRemoteState<Int>(cacheKey) {
-    internal enum class OperationKey {
+    internal enum class OperationKey(
+        override val precedence: Int = 100,
+        public val symbol: String? = null,
+    ) : DebuggableOperation {
         ToRemoteString,
-        Add,
-        Sub,
-        Mul,
-        Div,
-        Mod,
-        And,
-        Or,
-        Xor,
-        Shl,
-        Shr,
+        Add(3, "+"),
+        Sub(3, "-"),
+        Mul(4, "*"),
+        Div(4, "/"),
+        Mod(4, "%"),
+        And(1),
+        Or(1),
+        Xor(1),
+        Shl(2, "shl"),
+        Shr(2, "shr"),
         Abs,
-        Neg,
-        Not,
+        Neg(5),
+        Not(5),
         CopySign,
         Min,
         Max,
         Id,
         ToFloat,
-        CompareEQ,
-        CompareNE,
-        CompareLT,
-        CompareLE,
-        CompareGT,
-        CompareGE,
+        CompareEQ(1, "=="),
+        CompareNE(1, "!="),
+        CompareLT(1, "<"),
+        CompareLE(1, "<="),
+        CompareGT(1, ">"),
+        CompareGE(1, ">="),
         Reference,
         Clamp,
-        SelectIfLT,
-        SelectIfLE,
-        SelectIfGT,
-        SelectIfGE,
+        SelectIfLT(0),
+        SelectIfLE(0),
+        SelectIfGT(0),
+        SelectIfGE(0);
+
+        override fun toDebugString(args: List<RemoteStateCacheKey>): String {
+            if (symbol != null && args.size == 2) {
+                return args.formatOp(symbol, precedence)
+            }
+            return when (this) {
+                Neg -> "-${args[0].toOperandString(precedence)}"
+                Not -> "${args[0].toOperandString(precedence)}.inv()"
+                And -> args.formatOp("and", precedence)
+                Or -> args.formatOp("or", precedence)
+                Xor -> args.formatOp("xor", precedence)
+                ToFloat -> "${args[0].toOperandString(precedence)}.toRemoteFloat()"
+                ToRemoteString -> "${args[0].toOperandString(precedence)}.toRemoteString()"
+                SelectIfLT -> args.formatSelect("<")
+                SelectIfLE -> args.formatSelect("<=")
+                SelectIfGT -> args.formatSelect(">")
+                SelectIfGE -> args.formatSelect(">=")
+                else -> formatCamelCaseFunction(args)
+            }
+        }
     }
 
     /**
@@ -103,7 +126,7 @@ internal constructor(
      * [creationState]. It utilizes a cache within the [creationState] to avoid redundant
      * computations, improving performance.
      *
-     * @param creationState The current [RemoteComposeCreationState].
+     * @param stateScope The current [RemoteStateScope].
      * @return The [LongArray] representing this remote integer\'s expression.
      */
     internal fun arrayForCreationState(stateScope: RemoteStateScope): LongArray {
@@ -502,94 +525,112 @@ internal constructor(
     }
 
     /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is equal to the value of this
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is equal to the value of this
      * [RemoteInt] or `false` otherwise.
      */
-    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun eq(b: RemoteInt): RemoteBoolean =
+    public fun isEqualTo(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareEQ,
             { a, b -> longArrayOf(1, 0, *b, *a, OP_SUB, OP_ABS, OP_IFELSE) },
         ) { a, b ->
             if (a == b) 1 else 0
         }
 
-    /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is not equal to the value of this
-     * [RemoteInt] or `false` otherwise.
-     */
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun ne(b: RemoteInt): RemoteBoolean =
+    @Deprecated("Use isEqualTo instead", ReplaceWith("isEqualTo(other)"))
+    public infix fun eq(other: RemoteInt): RemoteBoolean = isEqualTo(other)
+
+    /**
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is not equal to the value of
+     * this [RemoteInt] or `false` otherwise.
+     */
+    public fun isNotEqualTo(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareNE,
             { a, b -> longArrayOf(0, 1, *b, *a, OP_SUB, OP_ABS, OP_IFELSE) },
         ) { a, b ->
             if (a != b) 1 else 0
         }
 
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @Deprecated("Use isNotEqualTo instead", ReplaceWith("isNotEqualTo(other)"))
+    public infix fun ne(other: RemoteInt): RemoteBoolean = isNotEqualTo(other)
+
     /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is less than the value of this
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is less than the value of this
      * [RemoteInt] or `false` otherwise.
      */
-    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun lt(b: RemoteInt): RemoteBoolean =
+    public fun isLessThan(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareLT,
             { a, b -> longArrayOf(0, 1, *b, *a, OP_SUB, OP_IFELSE) },
         ) { a, b ->
             if (a < b) 1 else 0
         }
 
-    /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is less than or equal to the value
-     * of this [RemoteInt] or `false` otherwise.
-     */
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun le(b: RemoteInt): RemoteBoolean =
+    @Deprecated("Use isLessThan instead", ReplaceWith("isLessThan(other)"))
+    public infix fun lt(other: RemoteInt): RemoteBoolean = isLessThan(other)
+
+    /**
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is less than or equal to the
+     * value of this [RemoteInt] or `false` otherwise.
+     */
+    public fun isLessThanOrEqual(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareLE,
             { a, b -> longArrayOf(1, 0, *a, *b, OP_SUB, OP_IFELSE) },
         ) { a, b ->
             if (a <= b) 1 else 0
         }
 
-    /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is greater than the value of this
-     * [RemoteInt] or `false` otherwise.
-     */
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun gt(b: RemoteInt): RemoteBoolean =
+    @Deprecated("Use isLessThanOrEqual instead", ReplaceWith("isLessThanOrEqual(other)"))
+    public infix fun le(other: RemoteInt): RemoteBoolean = isLessThanOrEqual(other)
+
+    /**
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is greater than the value of
+     * this [RemoteInt] or `false` otherwise.
+     */
+    public fun isGreaterThan(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareGT,
             { a, b -> longArrayOf(0, 1, *a, *b, OP_SUB, OP_IFELSE) },
         ) { a, b ->
             if (a > b) 1 else 0
         }
 
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @Deprecated("Use isGreaterThan instead", ReplaceWith("isGreaterThan(other)"))
+    public infix fun gt(other: RemoteInt): RemoteBoolean = isGreaterThan(other)
+
     /**
-     * Returns a [RemoteBoolean] that evaluates to `true` if [b] is greater than or equal to the
+     * Returns a [RemoteBoolean] that evaluates to `true` if [other] is greater than or equal to the
      * value of this [RemoteInt] or `false` otherwise.
      */
-    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public infix fun ge(b: RemoteInt): RemoteBoolean =
+    public fun isGreaterThanOrEqual(other: RemoteInt): RemoteBoolean =
         comparisonOp(
             this,
-            b,
+            other,
             OperationKey.CompareGE,
             { a, b -> longArrayOf(1, 0, *b, *a, OP_SUB, OP_IFELSE) },
         ) { a, b ->
             if (a >= b) 1 else 0
         }
+
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @Deprecated("Use isGreaterThanOrEqual instead", ReplaceWith("isGreaterThanOrEqual(other)"))
+    public infix fun ge(other: RemoteInt): RemoteBoolean = isGreaterThanOrEqual(other)
 
     /**
      * Returns a [RemoteInt] that evaluates to the value of this [RemoteInt] shifted left by the

@@ -37,11 +37,24 @@ public open class RemoteBoolean internal constructor(internal val intValue: Remo
     internal override val cacheKey: RemoteStateCacheKey
         get() = intValue.cacheKey
 
-    internal enum class OperationKey {
+    internal enum class OperationKey : DebuggableOperation {
         SelectString,
         SelectFloat,
         SelectInt,
-        SelectBoolean,
+        SelectBoolean;
+
+        override val precedence: Int
+            get() = 0
+
+        override fun toDebugString(args: List<RemoteStateCacheKey>): String {
+            val condStr =
+                when (val cond = args[0].toOperandString(1)) {
+                    "1" -> "true"
+                    "0" -> "false"
+                    else -> cond
+                }
+            return "$condStr ? ${args[1].toOperandString(0)} : ${args[2].toOperandString(0)}"
+        }
     }
 
     @get:Suppress("AutoBoxing")
@@ -84,6 +97,16 @@ public open class RemoteBoolean internal constructor(internal val intValue: Remo
             RemoteInt(0)
         }
     )
+
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    override fun toDebugString(): String {
+        val str = super.toDebugString()
+        return when (str) {
+            "1" -> "true"
+            "0" -> "false"
+            else -> str
+        }
+    }
 
     /**
      * Converts this [RemoteBoolean] to its underlying [RemoteInt] representation, which evaluates
@@ -291,7 +314,7 @@ public open class RemoteBoolean internal constructor(internal val intValue: Remo
      * @param other The other [RemoteBoolean] to compare with.
      * @return A new [RemoteBoolean] representing the result of the equality comparison.
      */
-    public fun isEqualTo(other: RemoteBoolean): RemoteBoolean = intValue eq other.intValue
+    public fun isEqualTo(other: RemoteBoolean): RemoteBoolean = intValue.isEqualTo(other.intValue)
 
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
     @Deprecated("Use isEqualTo instead", ReplaceWith("isEqualTo(other)"))
@@ -306,7 +329,8 @@ public open class RemoteBoolean internal constructor(internal val intValue: Remo
      * @param other The other [RemoteBoolean] to compare with.
      * @return A new [RemoteBoolean] representing the result of the inequality comparison.
      */
-    public fun isNotEqualTo(other: RemoteBoolean): RemoteBoolean = intValue ne other.intValue
+    public fun isNotEqualTo(other: RemoteBoolean): RemoteBoolean =
+        intValue.isNotEqualTo(other.intValue)
 
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
     @Deprecated("Use isNotEqualTo instead", ReplaceWith("isNotEqualTo(other)"))
@@ -435,8 +459,10 @@ public class MutableRemoteBoolean internal constructor(remoteInt: MutableRemoteI
          * @param initialValue The initial value for this mutable boolean.
          * @return A [MutableRemoteBoolean] instance.
          */
-        public operator fun invoke(initialValue: Boolean): MutableRemoteBoolean =
-            MutableRemoteBoolean(MutableRemoteInt(if (initialValue) 1 else 0))
+        public operator fun invoke(initialValue: Boolean): MutableRemoteBoolean {
+            val initInt: Int = if (initialValue) 1 else 0
+            return MutableRemoteBoolean(MutableRemoteInt(initInt))
+        }
     }
 }
 
@@ -455,7 +481,8 @@ public val Boolean.rb: RemoteBoolean
 @Composable
 @RemoteComposable
 public fun rememberMutableRemoteBoolean(initialValue: Boolean): MutableRemoteBoolean {
-    return remember { MutableRemoteBoolean(MutableRemoteInt(if (initialValue) 1 else 0)) }
+    val initInt: Int = if (initialValue) 1 else 0
+    return remember { MutableRemoteBoolean(MutableRemoteInt(initInt)) }
 }
 
 /**

@@ -29,6 +29,8 @@ private val FILL_IN_PATTERN = Regex("\\{(.+?)\\}")
 // "?type=user_{id}" becomes "^user_([\\s\\S]+?)?$"
 private const val PLACEHOLDER_CONTENT_PATTERN = "([\\s\\S]+?)?"
 private val PATH_REGEX = Regex("([^/]*?|)")
+private const val DEFAULT_SCHEME_PATTERN = "http[s]?://"
+private const val STRICT_SCHEME_PATTERN = "https://"
 
 /**
  * Represents a deep link that can be deep linked into when matched with a [DeepLinkRequest]
@@ -139,7 +141,7 @@ private val PATH_REGEX = Regex("([^/]*?|)")
 public open class UriDeepLinkMatcher<T : Any>(
     private val uriPattern: DeepLinkUri,
     private val serializer: KSerializer<T>,
-    filters: List<Filter<Any>> = emptyList(),
+    filters: List<Filter> = emptyList(),
 ) : DeepLinkMatcher<T>(filters) {
 
     // Pair of path pattern regex to list of extracted arg names. List is empty if path
@@ -182,7 +184,10 @@ public open class UriDeepLinkMatcher<T : Any>(
      *   matched, null otherwise.
      */
     protected open fun matchUri(uri: DeepLinkUri): UriMatchResult<T>? {
-        if (!uri.getScheme().equals(uriPattern.getScheme(), ignoreCase = true)) return null
+        val regexPattern = parsedPath.first.pattern
+        val schemeRegex =
+            regexPattern.substring(1, regexPattern.indexOf("://")).toRegex(RegexOption.IGNORE_CASE)
+        if (!schemeRegex.matches(uri.getScheme().orEmpty())) return null
         if (!uri.getAuthority().equals(uriPattern.getAuthority(), ignoreCase = true)) return null
         val pathSegments = uriPattern.getPathSegments()
         if (
@@ -271,6 +276,14 @@ public open class UriMatchResult<T : Any>(key: T, public val arguments: Map<Stri
         this.matchingPathArgumentCount = matchingPathArgumentCount
     }
 
+    /**
+     * Indicates whether the [UriDeepLinkMatcher] and [DeepLinkRequest] match that produced this
+     * result was matched on an exact uri path, meaning a path that
+     * 1. does not contain any arguments
+     * 2. does not contain any wildcards
+     *
+     * True if it is an exact path, false otherwise.
+     */
     protected var isExactPath: Boolean = false
     private var matchingPathArgumentCount: Int = -1
 
@@ -331,10 +344,13 @@ internal object UriPatternParser {
         val segments = uriPattern.getPathSegments().fastFilter { it.isNotEmpty() }
 
         // parse scheme
-        uriPattern.getScheme()?.let { scheme ->
-            // escape in case scheme contains any special regex characters e.g. "foo.bar://"
-            uriRegex.append(Regex.escape(scheme)).append("://")
-        } ?: uriRegex.append("http[s]?://")
+        val scheme = uriPattern.getScheme()
+        when {
+            scheme == null -> uriRegex.append(DEFAULT_SCHEME_PATTERN)
+            scheme.equals("https", true) -> uriRegex.append(STRICT_SCHEME_PATTERN)
+            scheme.equals("http", true) -> uriRegex.append(DEFAULT_SCHEME_PATTERN)
+            else -> uriRegex.append(Regex.escape(scheme)).append("://")
+        }
         // parse authority
         uriPattern.getAuthority()?.let {
             uriRegex.append(Regex.escape(it))

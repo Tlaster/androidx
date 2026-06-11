@@ -38,7 +38,7 @@ buildscript {
         if (agpOverride != null) {
             classpath("com.android.settings:com.android.settings.gradle.plugin:$agpOverride")
         } else {
-            classpath("com.android.settings:com.android.settings.gradle.plugin:9.3.0-alpha05")
+            classpath("com.android.settings:com.android.settings.gradle.plugin:9.3.0-alpha11")
         }
         // set guava version to be compatible with Depdendency analysis gradle plugin
         classpath("com.google.guava:guava:33.3.1-jre")
@@ -434,7 +434,6 @@ includeProject(":appcompat:appcompat-resources", [BuildType.MAIN])
 includeProject(":appcompat:integration-tests:receive-content-testapp", [BuildType.MAIN])
 includeProject(":appfunctions:appfunctions", [BuildType.MAIN])
 includeProject(":appfunctions:appfunctions-compiler", [BuildType.MAIN])
-includeProject(":appfunctions:appfunctions-service", [BuildType.MAIN])
 includeProject(":appfunctions:appfunctions-stubs", [BuildType.MAIN])
 includeProject(":appfunctions:appfunctions-testing", [BuildType.MAIN])
 includeProject(":appfunctions:integration-tests:multi-modules-testapp:app", [BuildType.MAIN])
@@ -453,6 +452,7 @@ includeProject(":appsearch:appsearch-platform-storage", [BuildType.MAIN])
 includeProject(":appsearch:appsearch-play-services-storage", [BuildType.MAIN])
 includeProject(":appsearch:appsearch-test-util", [BuildType.MAIN])
 includeProject(":appstate:appstate", [BuildType.KMP])
+includeProject(":appstate:appstate-transform", [BuildType.KMP, BuildType.COMPOSE])
 includeProject(":arch:core:core-common", [BuildType.MAIN, BuildType.FLAN, BuildType.COMPOSE])
 includeProject(":arch:core:core-runtime", [BuildType.MAIN, BuildType.FLAN, BuildType.COMPOSE])
 includeProject(":arch:core:core-testing", [BuildType.MAIN])

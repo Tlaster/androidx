@@ -103,7 +103,12 @@ public class PatternInflation extends Operation implements Container, ComponentD
         // Run materialize recursively so nested MacroCalls/ForEach/Arguments expand too.
         ExpansionContext child =
                 new ExpansionContext(
-                        loomManager, context.getDocument(), ctx, context.getBlocksForCall(this));
+                        loomManager,
+                        context.getDocument(),
+                        ctx,
+                        context.getBlocksForCall(this),
+                        context.isSafeMode(),
+                        context.getDepth() + 1);
         child.expandRecursive(templateOps, result, loomManager);
     }
 
@@ -141,6 +146,10 @@ public class PatternInflation extends Operation implements Container, ComponentD
     public static void read(@NonNull WireBuffer buffer, @NonNull List<Operation> operations) {
         int id = buffer.readId();
         int argCount = buffer.readInt();
+        if (argCount < 0 || argCount > (buffer.getSize() - buffer.getIndex()) / 4) {
+            throw new RuntimeException(
+                    "attempt to allocate an array of invalid size: " + argCount);
+        }
         int[] argIds = new int[argCount];
         for (int i = 0; i < argCount; i++) {
             argIds[i] = buffer.readId();
