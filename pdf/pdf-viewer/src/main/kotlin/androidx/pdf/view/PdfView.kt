@@ -65,7 +65,6 @@ import androidx.pdf.PdfFeature
 import androidx.pdf.PdfPoint
 import androidx.pdf.R
 import androidx.pdf.autofill.PdfAutofillHandler
-import androidx.pdf.autofill.getVirtualFormWidgetId
 import androidx.pdf.content.ExternalLink
 import androidx.pdf.event.PdfTrackingEvent
 import androidx.pdf.event.RequestFailureEvent
@@ -74,6 +73,7 @@ import androidx.pdf.featureflag.PdfFeatureFlags
 import androidx.pdf.formfilling.FormFillingEditTextState
 import androidx.pdf.models.FormEditInfo
 import androidx.pdf.models.FormWidgetInfo
+import androidx.pdf.ocr.OcrContextRepository
 import androidx.pdf.ocr.OcrProvider
 import androidx.pdf.selection.ContextMenuComponent
 import androidx.pdf.selection.Selection
@@ -310,11 +310,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
      *
      * @param ocrProvider the [OcrProvider] to use for text recognition
      */
-    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
     public fun setOcrProvider(ocrProvider: OcrProvider?) {
+        checkMainThread()
         if (this@PdfView.ocrProvider == ocrProvider) return
         this@PdfView.ocrProvider = ocrProvider
         selectionStateManager?.ocrProvider = ocrProvider
+
+        val localPdfDocument = pdfDocument
+        val ocrContextRepository =
+            if (ocrProvider != null && localPdfDocument != null) {
+                OcrContextRepository(localPdfDocument, ocrProvider)
+            } else {
+                null
+            }
+        pageManager?.setOcrContextRepository(ocrContextRepository)
     }
 
     /**
@@ -794,8 +803,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
     public var fastScrollVisibility: FastScrollVisibility = FastScrollVisibility.AUTO_HIDE
         set(value) {
             field = value
-            if (value == FastScrollVisibility.ALWAYS_SHOW) fastScroller?.show { postInvalidate() }
-            else if (value == FastScrollVisibility.ALWAYS_HIDE) fastScroller?.hide()
+            fastScroller?.shouldAutoHide = (value == FastScrollVisibility.AUTO_HIDE)
+            if (
+                value == FastScrollVisibility.ALWAYS_SHOW || value == FastScrollVisibility.AUTO_HIDE
+            )
+                fastScroller?.show { postInvalidate() }
+            else {
+                fastScroller?.hide()
+                postInvalidate()
+            }
         }
 
     /**
@@ -916,6 +932,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
         set(value) {
             field = value
             pageManager?.isAccessibilityEnabled = value
+            initAccessibility()
         }
 
     private var accessibilityManager: AccessibilityManager =
@@ -924,9 +941,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
     internal val accessibilityStateChangeHandler =
         AccessibilityManager.AccessibilityStateChangeListener { isEnabled ->
             isAccessibilityEnabled = isEnabled
-            setAccessibility()
         }
-
     private var selectionStateManager: SelectionStateManager? = null
     private val selectionRenderer = SelectionRenderer(context)
 
@@ -1739,7 +1754,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
             PageLayoutManager(
                     localPdfDocument,
                     backgroundScope,
-                    topPageMarginPx = context.getDimensions(R.dimen.top_page_margin),
                     pagesPerRow = pagesPerRow,
                     horizontalPageSpacingPx = horizontalPageSpacing.toFloat(),
                     verticalPageSpacingPx = verticalPageSpacing.toFloat(),
@@ -1779,7 +1793,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
         if (isImageSelectionAvailableInSdk()) {
             isImageSelectionEnabled = localStateToRestore.isImageSelectionEnabled
         }
-        setAccessibility()
+        initAccessibility()
 
         restoreFormFillingEditText()
 
@@ -1858,35 +1872,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
                     }
                 }
         }
-        if (PdfFeatureFlags.isAutofillEnabled) {
-            formWidgetMetadataLoader?.let { loader ->
-                val hintTextToJoin = hintTextCollector?.apply { cancel() }
-                hintTextCollector =
-                    mainScope.launch {
-                        hintTextToJoin?.join()
-                        // If a widget gains focus before its hint text is ready, re-trigger the
-                        // interaction event once available to ensure the virtual view hierarchy
-                        // is updated with correct metadata.
-                        loader.hintTextReadyFlow.collect { (pageNum, widgetIndex) ->
-                            val currentEdit = formFillingEditText
-                            if (
-                                currentEdit != null &&
-                                    currentEdit.pageNum == pageNum &&
-                                    currentEdit.formWidget.widgetIndex == widgetIndex
-                            ) {
-                                val virtualId =
-                                    getVirtualFormWidgetId(
-                                        pageNum,
-                                        currentEdit.formWidget.widgetIndex,
-                                    )
-                                formWidgetInteractionHandler
-                                    ?.interactionListener
-                                    ?.onWidgetInteractionStarted(virtualId, currentEdit.formWidget)
-                            }
-                        }
-                    }
-            }
-        }
+
         selectionStateManager?.let { manager ->
             val selectionToJoin = selectionStateCollector?.apply { cancel() }
             selectionStateCollector =
@@ -2056,6 +2042,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
                 Point(maxBitmapDimensionPx, maxBitmapDimensionPx),
                 errorFlow,
                 isAccessibilityEnabled,
+                ocrProvider?.let { OcrContextRepository(localPdfDocument, it) },
             )
 
         formWidgetInteractionHandler =
@@ -2084,7 +2071,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
                 PageLayoutManager(
                         localPdfDocument,
                         backgroundScope,
-                        topPageMarginPx = context.getDimensions(R.dimen.top_page_margin),
                         pagesPerRow = pagesPerRow,
                         horizontalPageSpacingPx = horizontalPageSpacing.toFloat(),
                         verticalPageSpacingPx = verticalPageSpacing.toFloat(),
@@ -2107,7 +2093,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
                     isImageSelectionEnabled = isImageSelectionAvailable,
                     ocrProvider = ocrProvider,
                 )
-            setAccessibility()
+            initAccessibility()
         }
 
         /* PageMetadataLoader must have been initialized either with the restored state
@@ -2336,11 +2322,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
             ),
             formWidgetInfos,
         )
-
-        if (isFormFillingEnabled) {
-            backgroundScope.launch { formWidgetMetadataLoader?.maybeLoadHintsForPage(pageNum) }
-        }
-
         // Learning the dimensions of a page can change our understanding of the content that's in
         // the viewport
         onViewportChanged()
@@ -2421,7 +2402,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
      * and [.pageManager] are initialized, and sets it as the accessibility delegate for the view
      * using [ViewCompat.setAccessibilityDelegate].
      */
-    private fun setAccessibility() {
+    private fun initAccessibility() {
+        fastScrollVisibility =
+            if (isAccessibilityEnabled) {
+                FastScrollVisibility.ALWAYS_SHOW
+            } else {
+                FastScrollVisibility.AUTO_HIDE
+            }
         if (isAccessibilityEnabled && pageLayoutManager != null && pageManager != null) {
             pdfViewAccessibilityManager =
                 PdfViewAccessibilityManager(
@@ -2436,6 +2423,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
             pdfViewAccessibilityManager = null
         }
         ViewCompat.setAccessibilityDelegate(this, pdfViewAccessibilityManager)
+    }
+
+    @RestrictTo(RestrictTo.Scope.LIBRARY)
+    public fun updateFastScrollVisibility() {
+        fastScrollVisibility =
+            if (isAccessibilityEnabled) {
+                FastScrollVisibility.ALWAYS_SHOW
+            } else {
+                FastScrollVisibility.AUTO_HIDE
+            }
     }
 
     internal fun commitFormFillingEditText() {

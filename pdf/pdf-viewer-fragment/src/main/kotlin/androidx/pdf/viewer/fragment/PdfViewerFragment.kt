@@ -60,10 +60,12 @@ import androidx.pdf.event.RequestFailureEvent
 import androidx.pdf.models.FormEditInfo
 import androidx.pdf.ocr.OcrProvider
 import androidx.pdf.selection.Selection
+import androidx.pdf.util.Accessibility
 import androidx.pdf.util.AnnotationUtils
 import androidx.pdf.util.Uris
 import androidx.pdf.view.PdfContentLayout
 import androidx.pdf.view.PdfView
+import androidx.pdf.view.PdfView.FastScrollVisibility
 import androidx.pdf.view.ToolBoxView
 import androidx.pdf.view.search.PdfSearchView
 import androidx.pdf.viewer.PdfPasswordDialog
@@ -258,17 +260,12 @@ public open class PdfViewerFragment constructor() : Fragment() {
     @ExperimentalPdfApi public open fun onPdfViewCreated(pdfView: PdfView) {}
 
     /**
-     * Sets the [OcrProvider] used for recognizing text in image-based PDF content.
+     * Invoked when the [OcrProvider] is needed for recognizing text in image-based PDF content.
+     * Subclasses can override this method to provide a custom [OcrProvider] implementation.
      *
-     * @param ocrProvider the [OcrProvider] to use for text recognition
+     * @return The [OcrProvider] instance to be used, or `null` if OCR is not supported or desired.
      */
-    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-    public fun setOcrProvider(ocrProvider: OcrProvider?) {
-        documentViewModel.ocrProvider = ocrProvider
-        if (::_pdfView.isInitialized) {
-            _pdfView.setOcrProvider(ocrProvider)
-        }
-    }
+    public open fun onCreateOcrProvider(): OcrProvider? = null
 
     @get:RestrictTo(RestrictTo.Scope.LIBRARY)
     protected open val documentViewModel: PdfDocumentViewModel by viewModels {
@@ -401,6 +398,8 @@ public open class PdfViewerFragment constructor() : Fragment() {
         if (stylingOptions != null) {
             applyPdfViewStyledAttributes(stylingOptions.containerStyleResId)
         }
+
+        documentViewModel.ocrProvider = onCreateOcrProvider()
 
         setupPdfView()
         setupToolbox()
@@ -654,8 +653,16 @@ public open class PdfViewerFragment constructor() : Fragment() {
                             fastScrollVisibility = PdfView.FastScrollVisibility.ALWAYS_HIDE
                         }
                     } else {
+                        val isAccessibilityEnabled: Boolean =
+                            Accessibility.get().isAccessibilityEnabled(requireContext())
+
                         // Let PdfView internally control fast scroller visibility.
-                        _pdfView.fastScrollVisibility = PdfView.FastScrollVisibility.AUTO_HIDE
+                        _pdfView.fastScrollVisibility =
+                            if (isAccessibilityEnabled) {
+                                FastScrollVisibility.ALWAYS_SHOW
+                            } else {
+                                FastScrollVisibility.AUTO_HIDE
+                            }
                     }
                 }
             }

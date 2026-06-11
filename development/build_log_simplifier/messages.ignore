@@ -37,6 +37,7 @@ Calculating task graph as no cached configuration is available for tasks.*
 Calculating task graph as configuration cache cannot be reused because the file system entry.*
 Calculating task graph as configuration cache cannot be reused because directory.*
 Calculating task graph as configuration cache cannot be reused because an input to plugin class.*
+Calculating task graph as configuration cache cannot be reused because Gradle property.*
 Calculating task graph as configuration cache cannot be reused because an input to unknown location has changed.*
 Calculating task graph as configuration cache cannot be reused because the set of Gradle properties prefixed by 'androidx.' has changed.*
 See the profiling report at\: file\:\/\/\$OUT_DIR\/androidx\/build\/reports\/profile\/profile\-[0-9]+\-[0-9]+\-[0-9]+\-[0-9]+\-[0-9]+\-[0-9]+\.html
@@ -1031,7 +1032,7 @@ w: file://\$SUPPORT/navigation/navigation-runtime/src/wasmJsTest/kotlin/androidx
 \[KOTLIN\] \[IC\] Incremental compilation was attempted but failed:
 java\.lang\.IllegalStateException: The following LookupSymbols are not yet converted to ProgramSymbols:.*
 (?:.*[\n\r])*.*Falling back to non\-incremental compilation \(reason = IC_FAILED_TO_COMPUTE_FILES_TO_RECOMPILE\)
-(?:.*[\n\r])*.*e: Incremental compilation failed: The following LookupSymbols are not yet converted to ProgramSymbols:.*SchemaAppFunctionInventory_Impl\)
+(?:.*[\n\r])*.*e: Incremental compilation failed: The following LookupSymbols are not yet converted to ProgramSymbols:.*(SchemaAppFunctionInventory_Impl|AggregatedAppFunctionInvoker_Impl)\)
 # > Task :car:app:app-automotive:compileReleaseJavaWithJavac b/316376113
 \$OUT_DIR/androidx/car/app/app\-automotive/build/generated/source/stable_aidl/release/androidx/car/app/activity/renderer/IInsetsListener\.java:[0-9]+: warning: \[dep\-ann\] deprecated item is not annotated with @Deprecated
 @Override public void onInsetsChanged\(android\.graphics\.Insets insets\) throws android\.os\.RemoteException
@@ -1042,6 +1043,6 @@ java\.lang\.IllegalStateException: The following LookupSymbols are not yet conve
 (?:Lint found no errors or warnings.*|[0-9]+ errors/warnings were listed in the baseline file \(\$SUPPORT/.*lint\-baseline\.xml\) but not found in the project; perhaps they have been fixed\?)
 # https://youtrack.jetbrains.com/issue/KT-85582/: Transitive peer dependency warning from Kotlin/Wasm tooling. Doesn't impact build.
 warning "webpack\-dev\-server > webpack\-dev\-middleware > memfs@[^"]+" has unmet peer dependency "tslib@2"\.
-# b/500398048: Warning from in_progress_stroke_jni_helper.cc
+# b/500398048: Warning from in_progress_stroke_native_helper.cc
 WARNING: Logging before InitGoogle\(\) is written to STDERR
-.*in_progress_stroke_jni_helper\.cc:[0-9]+\] Triangle index data exceeds 16\-bit limit, attempting to partition into [0-9]+ partitions\.
+.*in_progress_stroke_native_helper\.cc:[0-9]+\] Triangle index data exceeds 16\-bit limit, attempting to partition into [0-9]+ partitions\.

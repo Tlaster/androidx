@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.glance.wear.AssociateWithGlanceWearWidget
 import androidx.glance.wear.ExperimentalGlanceWearApi
 import androidx.glance.wear.GlanceWearWidget
 import androidx.glance.wear.GlanceWearWidgetService
@@ -44,13 +45,14 @@ import androidx.glance.wear.WearWidgetData
 import androidx.glance.wear.WearWidgetDocument
 import androidx.glance.wear.color
 import androidx.glance.wear.core.WearWidgetParams
-import androidx.glance.wear.health.DataTypes
+import androidx.glance.wear.health.HealthData
 
+@AssociateWithGlanceWearWidget(HealthDataWidget::class)
 class HealthDataWidgetService : GlanceWearWidgetService() {
     override val widget: GlanceWearWidget = HealthDataWidget()
 }
 
-private class HealthDataWidget : GlanceWearWidget() {
+internal class HealthDataWidget : GlanceWearWidget() {
     override suspend fun provideWidgetData(
         context: Context,
         params: WearWidgetParams,
@@ -75,24 +77,22 @@ private fun HealthDataWidgetContent() {
             PackageManager.PERMISSION_GRANTED
     }
 
-    val isHeartRateAvailable =
-        DataTypes.heartRateAccuracy
-            .eq(DataTypes.HEART_RATE_ACCURACY_LOW)
-            .or(DataTypes.heartRateAccuracy.eq(DataTypes.HEART_RATE_ACCURACY_MEDIUM))
-            .or(DataTypes.heartRateAccuracy.eq(DataTypes.HEART_RATE_ACCURACY_HIGH))
-
-    val heartRateStr = isHeartRateAvailable.select(DataTypes.heartRateBpm.toRemoteString(), "--".rs)
+    val heartRateStr =
+        HealthData.isHeartRateBpmAvailable.select(HealthData.heartRateBpm.toRemoteString(), "--".rs)
     val dailyStepsStr =
-        DataTypes.isDailyStepsAvailable.select(DataTypes.dailySteps.toRemoteString(), "--".rs)
+        HealthData.isDailyStepsAvailable.select(HealthData.dailySteps.toRemoteString(), "--".rs)
     val dailyCaloriesStr =
-        DataTypes.isDailyCaloriesAvailable.select(DataTypes.dailyCalories.toRemoteString(), "--".rs)
+        HealthData.isDailyCaloriesAvailable.select(
+            HealthData.dailyCalories.toRemoteString(),
+            "--".rs,
+        )
     val dailyDistanceMetersStr =
-        DataTypes.isDailyDistanceMetersAvailable.select(
-            DataTypes.dailyDistanceMeters.toRemoteString(),
+        HealthData.isDailyDistanceMetersAvailable.select(
+            HealthData.dailyDistanceMeters.toRemoteString(),
             "--".rs,
         )
     val dailyFloorsStr =
-        DataTypes.isDailyFloorsAvailable.select(DataTypes.dailyFloors.toRemoteString(), "--".rs)
+        HealthData.isDailyFloorsAvailable.select(HealthData.dailyFloors.toRemoteString(), "--".rs)
 
     RemoteColumn(
         modifier = RemoteModifier.fillMaxSize(),
