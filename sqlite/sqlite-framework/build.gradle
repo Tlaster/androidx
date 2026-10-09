@@ -33,6 +33,13 @@ plugins {
 }
 
 configurations {
+    sqliteMingwArchive {
+        canBeConsumed = false
+        canBeResolved = true
+        attributes {
+            attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.NATIVE_LINK))
+        }
+    }
     // Configuration for resolving shared archive file of androidx's SQLite compilation
     sqliteSharedArchive {
         canBeConsumed = false
@@ -62,6 +69,7 @@ androidXMultiplatform {
         }
     }
     linux()
+    mingwX64()
     mac()
     tvos()
     watchos()
@@ -69,6 +77,10 @@ androidXMultiplatform {
     defaultPlatform(PlatformIdentifier.ANDROID)
 
     sourceSets {
+        create("unixMain").dependsOn(nativeMain)
+        appleMain.dependsOn(unixMain)
+        linuxMain.dependsOn(unixMain)
+
         configureEach {
             if (!it.name.contains("android") && !it.name.contains("common") ) {
                 // For usage of C interop APIs
@@ -107,6 +119,8 @@ androidXMultiplatform {
                     // For tests in Linux host, statically include androidx's compiled SQLite
                     // via a generated C interop definition
                     createCinteropFromArchiveConfiguration(test, configurations["sqliteSharedArchive"])
+                } else if (target.konanTarget.family == Family.MINGW) {
+                    createCinteropFromArchiveConfiguration(test, configurations["sqliteMingwArchive"])
                 } else if (target.konanTarget.family == Family.OSX) {
                     // For tests in Mac host, link to shared SQLite library included in MacOS
                     test.kotlinOptions.freeCompilerArgs += [
@@ -119,7 +133,8 @@ androidXMultiplatform {
 }
 
 dependencies {
-    sqliteSharedArchive(project(":sqlite:sqlite-bundled"))
+    sqliteSharedArchive(project(path: ":sqlite:sqlite-bundled", configuration: "linuxSharedArchive"))
+    sqliteMingwArchive(project(path: ":sqlite:sqlite-bundled", configuration: "windowsSharedArchive"))
     sqliteSources(project(":sqlite:sqlite-bundled"))
 }
 

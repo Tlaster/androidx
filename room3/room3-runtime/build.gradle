@@ -39,6 +39,13 @@ plugins {
 }
 
 configurations {
+    sqliteMingwArchive {
+        canBeConsumed = false
+        canBeResolved = true
+        attributes {
+            attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.NATIVE_LINK))
+        }
+    }
     // Configuration for resolving shared archive file of androidx's SQLite compilation
     sqliteSharedArchive {
         canBeConsumed = false
@@ -70,6 +77,7 @@ androidXMultiplatform {
     js()
     jvm()
     linux()
+    mingwX64()
     mac()
     tvos()
     wasmJs()
@@ -78,11 +86,15 @@ androidXMultiplatform {
     defaultPlatform(PlatformIdentifier.ANDROID)
 
     sourceSets {
+        create("unixMain").dependsOn(nativeMain)
+        appleMain.dependsOn(unixMain)
+        linuxMain.dependsOn(unixMain)
+
         commonMain {
             dependencies {
                 api(project(":room3:room3-common"))
-                api("androidx.sqlite:sqlite:2.7.0")
-                implementation("androidx.sqlite:sqlite-async:2.7.0")
+                api(project(":sqlite:sqlite"))
+                implementation(project(":sqlite:sqlite-async"))
                 api("androidx.collection:collection:1.5.0")
                 api("androidx.annotation:annotation:1.9.1")
                 api(libs.kotlinCoroutinesCore)
@@ -123,7 +135,7 @@ androidXMultiplatform {
             kotlin.srcDirs += "src/androidMain/java"
             dependencies {
                 api(libs.jspecify)
-                api("androidx.sqlite:sqlite-framework:2.7.0")
+                api(project(":sqlite:sqlite-framework"))
                 api(libs.kotlinCoroutinesAndroid)
                 implementation("androidx.annotation:annotation-experimental:1.5.0")
             }
@@ -157,9 +169,12 @@ androidXMultiplatform {
             dependsOn(nonWebMain)
             dependsOn(jvmNativeWebMain)
             dependencies {
-                api("androidx.sqlite:sqlite-framework:2.7.0")
+                api(project(":sqlite:sqlite-framework"))
                 implementation(libs.atomicFu)
             }
+        }
+        mingwTest.dependencies {
+            implementation("com.squareup.okio:okio:3.18.2")
         }
         nativeTest {
             dependsOn(nonWebTest)
@@ -175,6 +190,8 @@ androidXMultiplatform {
                     // For tests in Linux host, statically include androidx's compiled SQLite
                     // via a generated C interop definition
                     createCinteropFromArchiveConfiguration(test, configurations["sqliteSharedArchive"])
+                } else if (target.konanTarget.family == Family.MINGW) {
+                    createCinteropFromArchiveConfiguration(test, configurations["sqliteMingwArchive"])
                 } else if (target.konanTarget.family == Family.OSX) {
                     // For tests in Mac host, link to shared SQLite library included in MacOS
                     test.kotlinOptions.freeCompilerArgs += [
@@ -190,7 +207,8 @@ androidXMultiplatform {
 }
 
 dependencies {
-    sqliteSharedArchive(project(":sqlite:sqlite-bundled"))
+    sqliteSharedArchive(project(path: ":sqlite:sqlite-bundled", configuration: "linuxSharedArchive"))
+    sqliteMingwArchive(project(path: ":sqlite:sqlite-bundled", configuration: "windowsSharedArchive"))
     add("kspAndroidDeviceTest", project(":room3:room3-compiler"))
 }
 

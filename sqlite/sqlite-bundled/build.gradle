@@ -28,6 +28,7 @@ import androidx.build.SoftwareType
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.konan.target.Family
 import org.jetbrains.kotlin.konan.target.KonanTarget
+import org.gradle.nativeplatform.OperatingSystemFamily
 
 plugins {
     id("AndroidXPlugin")
@@ -81,13 +82,23 @@ def prepareSqliteSourcesTask = ext.registerPrepareSqliteSourcesTask(
 }
 
 configurations {
-    // Configuration for producing a shareable archive file of compiled SQLite. Only the Linux X64
-    // target of SQLite is produced hence the explicit name and attributes
+    // Shareable SQLite archives for native driver tests.
     register("linuxSharedArchive") {
         canBeConsumed = true
         canBeResolved = false
         attributes {
             attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.NATIVE_LINK))
+            attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE,
+                    objects.named(OperatingSystemFamily, OperatingSystemFamily.LINUX))
+        }
+    }
+    register("windowsSharedArchive") {
+        canBeConsumed = true
+        canBeResolved = false
+        attributes {
+            attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, Usage.NATIVE_LINK))
+            attribute(OperatingSystemFamily.OPERATING_SYSTEM_ATTRIBUTE,
+                    objects.named(OperatingSystemFamily, OperatingSystemFamily.WINDOWS))
         }
     }
     // Configuration for producing a shareable directory that includes SQLite amalgamation sources.
@@ -145,6 +156,10 @@ androidXMultiplatform {
         sqliteCompilation.sharedArchiveOutputFor(KonanTarget.LINUX_X64.INSTANCE)
     )
     artifacts.add(
+        "windowsSharedArchive",
+        sqliteCompilation.sharedArchiveOutputFor(KonanTarget.MINGW_X64.INSTANCE)
+    )
+    artifacts.add(
         "sqliteSources",
         prepareSqliteSourcesTask.map { it.destinationDirectory }
     )
@@ -190,6 +205,7 @@ androidXMultiplatform {
         addNativeLibrariesToResources(it, jvmArtJniImplementation)
     }
     linux()
+    mingwX64()
     mac()
     tvos()
     watchos()
