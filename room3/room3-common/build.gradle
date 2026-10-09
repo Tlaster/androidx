@@ -36,6 +36,7 @@ androidXMultiplatform {
     jvm()
     mac()
     linux()
+    mingwX64()
     ios()
     wasmJs()
     tvos()

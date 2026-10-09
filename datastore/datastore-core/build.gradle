@@ -80,6 +80,7 @@ androidXMultiplatform {
     jvm()
     mac()
     linux()
+    mingwX64()
     ios()
     watchos()
     tvos()

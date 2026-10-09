@@ -1,0 +1,117 @@
+name: Publish MinGW snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['mingw-snapshot-*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mingw-snapshot-publishing
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Stage and check Maven publications
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    env:
+      OUT_DIR: /tmp/androidx-mingw-out
+    defaults:
+      run:
+        shell: bash
+        working-directory: playground-projects/storage-playground
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: |
+            17
+            21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Install the upstream NDK
+        run: |
+          ndk_version=$(sed -n 's/.*ndkVersion = "\([^"]*\)".*/\1/p' ../../buildSrc/ndk.gradle)
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version"
+      - name: Stage KMP and MinGW publications
+        run: |
+          ./gradlew -I ../../development/mingw/publish.init.gradle stageMingwSnapshot \
+            -Pandroidx.enabled.kmp.target.platforms=-MAC,-LINUX,-ANDROID_NATIVE,-JS,-WASM \
+            --no-configuration-cache --no-configure-on-demand --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
+          python3 ../../development/mingw/verify_publications.py \
+            "$OUT_DIR/storage-playground/build/mingw-snapshot-repository"
+      - name: Compile an independent snapshot consumer
+        run: |
+          ./gradlew -p ../../development/mingw/consumer \
+            "-PsnapshotRepository=file://$OUT_DIR/storage-playground/build/mingw-snapshot-repository" \
+            verifyForkDependencies linkDebugTestMingwX64 --no-configuration-cache --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-consumer-test
+          path: development/mingw/consumer/build/bin/mingwX64/debugTest/*.exe
+          if-no-files-found: error
+
+  windows:
+    name: Test staged snapshot on Windows
+    needs: stage
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: snapshot-consumer-test
+          path: consumer
+      - name: Run snapshot consumer
+        shell: pwsh
+        run: |
+          & ./consumer/test.exe 2>&1 | Tee-Object -FilePath snapshot-consumer.log
+          if ($LASTEXITCODE -ne 0) { throw 'Snapshot consumer failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshot-consumer-test-log
+          path: snapshot-consumer.log
+
+  publish:
+    name: Publish Central snapshots
+    needs: windows
+    if: github.repository == 'Tlaster/androidx'
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    env:
+      OUT_DIR: /tmp/androidx-mingw-out
+    defaults:
+      run:
+        shell: bash
+        working-directory: playground-projects/storage-playground
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: |
+            17
+            21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install the upstream NDK
+        run: |
+          ndk_version=$(sed -n 's/.*ndkVersion = "\([^"]*\)".*/\1/p' ../../buildSrc/ndk.gradle)
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk_version"
+      - name: Publish the eighteen snapshot publications
+        env:
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+        run: |
+          ./gradlew -I ../../development/mingw/publish.init.gradle publishMingwSnapshot \
+            -Pandroidx.enabled.kmp.target.platforms=-MAC,-LINUX,-ANDROID_NATIVE,-JS,-WASM \
+            --no-configuration-cache --no-configure-on-demand --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
+      - name: Verify consumption from Central snapshots
+        run: |
+          ./gradlew -p ../../development/mingw/consumer \
+            -PsnapshotRepository=https://central.sonatype.com/repository/maven-snapshots/ \
+            verifyForkDependencies linkDebugTestMingwX64 --refresh-dependencies --no-configuration-cache --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g

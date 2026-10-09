@@ -1,3 +1,5 @@
+> **Experimental Windows Native fork:** Room, SQLite and DataStore `mingwX64` support based on Flare's dependency releases. See [MINGW.md](MINGW.md) for pinned commits, build instructions and limitations.
+
 # Android Jetpack
 
 [![Revved up by Develocity](https://img.shields.io/badge/Revved%20up%20by-Develocity-06A0CE?logo=Gradle&labelColor=02303A)](https://androidx.develocity.cloud)

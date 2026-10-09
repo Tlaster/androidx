@@ -693,6 +693,7 @@ abstract class BaseConnectionPoolTest {
                 launch(multiThreadContext + CoroutineName("TheOneWhichIsCancelled")) {
                     pool.useWriterConnection { delay(Random.nextLong(5)) }
                 }
+            jobsToWaitFor.add(jobToCancel)
             jobsToWaitFor.add(
                 launch(multiThreadContext + CoroutineName("TheExtraOne")) {
                     pool.useWriterConnection { delay(Random.nextLong(5)) }

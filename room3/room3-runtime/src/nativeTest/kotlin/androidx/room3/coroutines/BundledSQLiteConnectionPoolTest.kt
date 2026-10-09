@@ -21,11 +21,13 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
-import platform.posix.remove
+import okio.FileSystem
+import okio.Path.Companion.toPath
 
 class BundledSQLiteConnectionPoolTest : BaseConnectionPoolTest() {
 
-    override val fileName = "/tmp/test-${Random.nextInt()}.db"
+    override val fileName =
+        (FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "test-${Random.nextInt()}.db").toString()
 
     override fun getDriver(): SQLiteDriver {
         return BundledSQLiteDriver()
@@ -42,8 +44,8 @@ class BundledSQLiteConnectionPoolTest : BaseConnectionPoolTest() {
     }
 
     private fun deleteDatabaseFile() {
-        remove(fileName)
-        remove("$fileName-wal")
-        remove("$fileName-shm")
+        for (suffix in listOf("", "-wal", "-shm")) {
+            FileSystem.SYSTEM.delete("$fileName$suffix".toPath(), mustExist = false)
+        }
     }
 }

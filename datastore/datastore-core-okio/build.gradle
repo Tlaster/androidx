@@ -35,6 +35,7 @@ androidXMultiplatform {
     jvm()
     mac()
     linux()
+    mingwX64()
     ios()
     watchos()
     tvos()
@@ -59,6 +60,11 @@ androidXMultiplatform {
             implementation(libs.kotlinCoroutinesTest)
             implementation(libs.kotlinTest)
             implementation(project(":internal-testutils-datastore"))
+        }
+
+        mingwMain.dependencies {
+            // Use Windows Unicode file APIs for application data paths.
+            api("com.squareup.okio:okio:3.18.2")
         }
 
         nativeMain.dependencies {

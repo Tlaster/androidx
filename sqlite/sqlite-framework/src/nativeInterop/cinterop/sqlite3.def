@@ -4,7 +4,7 @@ headers = sqlite3.h
 linkerOpts.linux = -lpthread -ldl
 linkerOpts.osx = -lpthread -ldl
 
-noStringConversion = sqlite3_prepare_v2 sqlite3_prepare_v3
+noStringConversion = sqlite3_prepare_v2 sqlite3_prepare_v3 sqlite3_load_extension
 
 excludedFunctions.osx = sqlite3_win32_set_directory sqlite3_win32_set_directory8 sqlite3_win32_set_directory16 sqlite3_mutex_held sqlite3_mutex_notheld sqlite3_unlock_notify
 excludedFunctions.ios = sqlite3_win32_set_directory sqlite3_win32_set_directory8 sqlite3_win32_set_directory16 sqlite3_mutex_held sqlite3_mutex_notheld sqlite3_unlock_notify
