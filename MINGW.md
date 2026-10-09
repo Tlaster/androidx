@@ -1,7 +1,8 @@
 # AndroidX storage on Windows Native
 
 This fork develops experimental `mingwX64` support for the storage versions used
-by Flare. It is not an official AndroidX distribution and has no Maven release yet.
+by Flare. It is not an official AndroidX distribution. Experimental Maven snapshots use the
+`moe.tlaster.androidx` namespace.
 
 ## Release baseline
 
@@ -69,3 +70,59 @@ CI uploads unpacked KLIBs, test executables and test logs. These are development
 outputs, not a complete Maven publication. Windows runtime support must be judged
 from the Windows job, not compilation alone. Network-share locking, process-crash
 recovery and Flare integration need further validation before production use.
+
+## Snapshot artifacts
+
+The nine libraries publish under `moe.tlaster.androidx.room3`,
+`moe.tlaster.androidx.sqlite`, and `moe.tlaster.androidx.datastore`, retaining their
+artifact names. Versions are `3.0.3-mingw-SNAPSHOT`, `2.7.1-mingw-SNAPSHOT`, and
+`1.3.0-alpha11-mingw-SNAPSHOT`, respectively.
+
+Add the [Central Portal snapshot repository](https://central.sonatype.org/publish/publish-portal-snapshots/):
+
+```kotlin
+repositories {
+    maven("https://central.sonatype.com/repository/maven-snapshots/") {
+        content { includeGroupByRegex("moe\\.tlaster\\.androidx\\..*") }
+    }
+    google()
+    mavenCentral()
+}
+```
+
+In a MinGW source set:
+
+```kotlin
+implementation("moe.tlaster.androidx.room3:room3-runtime:3.0.3-mingw-SNAPSHOT")
+implementation("moe.tlaster.androidx.room3:room3-paging:3.0.3-mingw-SNAPSHOT")
+implementation("moe.tlaster.androidx.sqlite:sqlite-bundled:2.7.1-mingw-SNAPSHOT")
+implementation("moe.tlaster.androidx.datastore:datastore-core-okio:1.3.0-alpha11-mingw-SNAPSHOT")
+```
+
+Use the official `androidx.room3:room3-compiler:3.0.3` with KSP. These snapshots
+include common metadata and `mingwX64` only; other platform binaries are not
+published under this namespace. Avoid combining upstream and fork storage
+libraries on the same target because their Kotlin packages are identical.
+Snapshots can be replaced and are subject to Sonatype's retention policy.
+
+The [snapshot workflow](.github/workflows/mingw-snapshot.yml) runs manually or
+when a `mingw-snapshot-*` tag is pushed. It stages all 18 root/target publications,
+checks metadata and internal coordinates, compiles an independent Maven consumer,
+and runs its Unicode database/DataStore test on Windows before uploading.
+Publishing uses the repository secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`,
+`SIGNING_KEY`, `SIGNING_KEY_ID`, and `SIGNING_PASSWORD`. The OSSRH-named secrets
+must contain a **Central Portal user token**; the namespace must have snapshots
+enabled. `SIGNING_KEY` accepts an armored private key or its Base64 encoding.
+
+To validate publication locally without credentials:
+
+```sh
+cd playground-projects/storage-playground
+./gradlew -I ../../development/mingw/publish.init.gradle stageMingwSnapshot \
+  --no-configuration-cache --no-configure-on-demand
+python3 ../../development/mingw/verify_publications.py \
+  "$OUT_DIR/storage-playground/build/mingw-snapshot-repository"
+```
+
+The publishing overlay is opt-in and leaves normal AndroidX build coordinates
+unchanged. Release publication is not configured.

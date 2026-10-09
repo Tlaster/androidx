@@ -1,0 +1,143 @@
+/*
+ * Copyright 2026 The Android Open Source Project
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy at https://www.apache.org/licenses/LICENSE-2.0
+ */
+
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
+import org.gradle.api.publish.tasks.GenerateModuleMetadata
+
+def paths = [
+    ':room3:room3-common', ':room3:room3-runtime', ':room3:room3-paging',
+    ':sqlite:sqlite', ':sqlite:sqlite-async', ':sqlite:sqlite-framework', ':sqlite:sqlite-bundled',
+    ':datastore:datastore-core', ':datastore:datastore-core-okio',
+]
+gradle.beforeProject { p ->
+    if (p.rootProject.name == 'storage-playground' && p.path in paths && System.getenv('SIGNING_KEY')) {
+        p.pluginManager.apply('signing')
+    }
+}
+
+// Opt-in publishing overlay: normal AndroidX builds retain their upstream coordinates.
+gradle.projectsEvaluated {
+    if (rootProject.name != 'storage-playground') return
+    def projects = paths.collect { rootProject.project(it) }
+    def coordinates = [:]
+    projects.each { p ->
+        ['', '-mingwx64'].each { suffix ->
+            coordinates["${p.group}:${p.name}${suffix}".toString()] = [
+                group: "moe.tlaster.${p.group}".toString(),
+                module: "${p.name}${suffix}".toString(),
+                version: "${p.version}-mingw-SNAPSHOT".toString(),
+            ]
+        }
+    }
+    def rewrite = { ref ->
+        def coordinate = coordinates["${ref.group}:${ref.module}".toString()]
+        if (coordinate) {
+            ref.group = coordinate.group
+            ref.version = ref.version instanceof Map ? [requires: coordinate.version] : coordinate.version
+            if (ref.url) {
+                ref.url = "../../${coordinate.module}/${coordinate.version}/${coordinate.module}-${coordinate.version}.module".toString()
+            }
+        }
+    }
+    def staging = rootProject.layout.buildDirectory.dir('mingw-snapshot-repository')
+    def stageTask = rootProject.tasks.register('stageMingwSnapshot')
+    def publishTask = rootProject.tasks.register('publishMingwSnapshot')
+    projects.each { p ->
+        def selected = p.publishing.publications.withType(MavenPublication).findAll {
+            it.name in ['kotlinMultiplatform', 'mingwX64']
+        }
+        assert selected.size() == 2 : "Missing KMP/MinGW publication for ${p.path}"
+        selected.each { publication ->
+            def coordinate = coordinates["${publication.groupId}:${publication.artifactId}".toString()]
+            publication.groupId = coordinate.group
+            publication.version = coordinate.version
+            publication.pom.url = 'https://github.com/Tlaster/androidx'
+            if (publication.name == 'kotlinMultiplatform') {
+                publication.artifacts.removeAll { it.extension == 'aar' }
+                publication.pom.packaging = 'pom'
+            }
+            publication.pom.withXml { xml ->
+                def node = xml.asNode()
+                node.dependencies.dependency.findAll {
+                    it.artifactId.text() == "${p.name}-android"
+                }.each { it.parent().remove(it) }
+                node.depthFirst().findAll { it.name() == 'dependency' }.each { dependency ->
+                    def replacement = coordinates["${dependency.groupId.text()}:${dependency.artifactId.text()}".toString()]
+                    if (replacement) {
+                        dependency.groupId[0].value = replacement.group
+                        dependency.version[0].value = replacement.version
+                    }
+                }
+            }
+        }
+        p.tasks.withType(GenerateModuleMetadata).configureEach { task ->
+            if (!(task.name in ['generateMetadataFileForKotlinMultiplatformPublication', 'generateMetadataFileForMingwX64Publication'])) return
+            task.doLast {
+                def file = task.outputFile.get().asFile
+                def metadata = new JsonSlurper().parse(file)
+                rewrite(metadata.component)
+                // Advertise only the native target we actually publish, plus common metadata/sources.
+                metadata.variants = metadata.variants.findAll {
+                    !it['available-at'] || it.attributes?.get('org.jetbrains.kotlin.native.target') == 'mingw_x64'
+                }
+                metadata.variants.each { variant ->
+                    if (variant['available-at']) rewrite(variant['available-at'])
+                    (variant.dependencies ?: []).each { rewrite(it) }
+                    (variant.dependencyConstraints ?: []).each { rewrite(it) }
+                }
+                file.text = JsonOutput.prettyPrint(JsonOutput.toJson(metadata)) + '\n'
+            }
+        }
+        p.publishing.repositories {
+            maven {
+                name = 'MingwStaging'
+                url = staging
+            }
+            maven {
+                name = 'CentralSnapshots'
+                url = 'https://central.sonatype.com/repository/maven-snapshots/'
+                credentials {
+                    username = System.getenv('OSSRH_USERNAME')
+                    password = System.getenv('OSSRH_PASSWORD')
+                }
+            }
+        }
+        def key = System.getenv('SIGNING_KEY')
+        if (key) {
+            if (!key.contains('BEGIN PGP PRIVATE KEY BLOCK')) {
+                key = new String(Base64.decoder.decode(key.replaceAll('\\s', '')), 'UTF-8')
+            }
+            def keyId = System.getenv('SIGNING_KEY_ID')?.trim()?.replaceFirst('^0[xX]', '')
+            if (!(keyId ==~ /(?i)([0-9a-f]{8}|[0-9a-f]{16}|[0-9a-f]{40})/)) {
+                throw new GradleException('SIGNING_KEY_ID must be an OpenPGP key ID or fingerprint')
+            }
+            // Gradle's in-memory signatory requires the short form, even for a full fingerprint.
+            p.signing.useInMemoryPgpKeys(keyId.takeRight(8), key, System.getenv('SIGNING_PASSWORD'))
+            p.signing.sign(selected as MavenPublication[])
+        }
+        selected.each { publication ->
+            def name = publication.name.capitalize()
+            stageTask.configure { dependsOn(p.tasks.named("publish${name}PublicationToMingwStagingRepository")) }
+            publishTask.configure { dependsOn(p.tasks.named("publish${name}PublicationToCentralSnapshotsRepository")) }
+        }
+        p.tasks.withType(PublishToMavenRepository).configureEach { task ->
+            if (task.repository.name == 'CentralSnapshots') {
+                task.doFirst {
+                    ['OSSRH_USERNAME', 'OSSRH_PASSWORD', 'SIGNING_KEY', 'SIGNING_KEY_ID', 'SIGNING_PASSWORD'].each {
+                        if (!System.getenv(it)) throw new GradleException("Missing required publishing secret: ${it}")
+                    }
+                    assert task.publication.groupId.startsWith('moe.tlaster.androidx.')
+                    assert task.publication.version.endsWith('-SNAPSHOT')
+                    assert task.publication.name in ['kotlinMultiplatform', 'mingwX64']
+                }
+            }
+        }
+    }
+}
