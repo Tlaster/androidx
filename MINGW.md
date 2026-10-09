@@ -109,16 +109,18 @@ The [snapshot workflow](.github/workflows/mingw-snapshot.yml) runs manually or
 when a `mingw-snapshot-*` tag is pushed. It stages all 18 root/target publications,
 checks metadata and internal coordinates, compiles an independent Maven consumer,
 and runs its Unicode database/DataStore test on Windows before uploading.
-Publishing uses the repository secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`,
-`SIGNING_KEY`, `SIGNING_KEY_ID`, and `SIGNING_PASSWORD`. The OSSRH-named secrets
-must contain a **Central Portal user token**; the namespace must have snapshots
-enabled. `SIGNING_KEY` accepts an armored private key or its Base64 encoding.
+Publishing uses only `OSSRH_USERNAME` and `OSSRH_PASSWORD`, containing a
+**Central Portal user token**; the namespace must have snapshots enabled. Like
+[mfm-multiplatform](https://github.com/Tlaster/mfm-multiplatform/blob/master/.github/workflows/ci.yml),
+these snapshots are unsigned. Signing secrets are reserved for future release
+publication and are not passed to this workflow.
 
 To validate publication locally without credentials:
 
 ```sh
 cd playground-projects/storage-playground
 ./gradlew -I ../../development/mingw/publish.init.gradle stageMingwSnapshot \
+  -Pandroidx.enabled.kmp.target.platforms=-MAC,-LINUX,-ANDROID_NATIVE,-JS,-WASM \
   --no-configuration-cache --no-configure-on-demand
 python3 ../../development/mingw/verify_publications.py \
   "$OUT_DIR/storage-playground/build/mingw-snapshot-repository"
@@ -126,4 +128,5 @@ python3 ../../development/mingw/verify_publications.py \
 
 The publishing overlay is opt-in and leaves normal AndroidX build coordinates
 unchanged. It omits AndroidX API-history documentation, which would otherwise
-compile every platform. Release publication is not configured.
+compile every platform. The workflow also disables unpublished native targets
+when generating common metadata. Release publication is not configured.
