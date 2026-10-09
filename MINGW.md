@@ -125,4 +125,5 @@ python3 ../../development/mingw/verify_publications.py \
 ```
 
 The publishing overlay is opt-in and leaves normal AndroidX build coordinates
-unchanged. Release publication is not configured.
+unchanged. It omits AndroidX API-history documentation, which would otherwise
+compile every platform. Release publication is not configured.

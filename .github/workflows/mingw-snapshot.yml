@@ -15,7 +15,8 @@ concurrency:
 jobs:
   stage:
     name: Stage and check Maven publications
-    runs-on: macos-latest
+    # Common metadata needs Apple cinterop; the Intel runner provides 14 GB RAM.
+    runs-on: macos-26-intel
     timeout-minutes: 60
     env:
       OUT_DIR: /tmp/androidx-mingw-out
@@ -41,14 +42,14 @@ jobs:
       - name: Stage KMP and MinGW publications
         run: |
           ./gradlew -I ../../development/mingw/publish.init.gradle stageMingwSnapshot \
-            --no-configuration-cache --no-configure-on-demand
+            --no-configuration-cache --no-configure-on-demand --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
           python3 ../../development/mingw/verify_publications.py \
             "$OUT_DIR/storage-playground/build/mingw-snapshot-repository"
       - name: Compile an independent snapshot consumer
         run: |
           ./gradlew -p ../../development/mingw/consumer \
             "-PsnapshotRepository=file://$OUT_DIR/storage-playground/build/mingw-snapshot-repository" \
-            verifyForkDependencies linkDebugTestMingwX64 --no-configuration-cache
+            verifyForkDependencies linkDebugTestMingwX64 --no-configuration-cache --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
       - uses: actions/upload-artifact@v4
         with:
           name: snapshot-consumer-test
@@ -80,7 +81,7 @@ jobs:
     name: Sign and publish Central snapshots
     needs: windows
     if: github.repository == 'Tlaster/androidx'
-    runs-on: macos-latest
+    runs-on: macos-26-intel
     timeout-minutes: 60
     env:
       OUT_DIR: /tmp/androidx-mingw-out
@@ -110,9 +111,9 @@ jobs:
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           ./gradlew -I ../../development/mingw/publish.init.gradle publishMingwSnapshot \
-            --no-configuration-cache --no-configure-on-demand
+            --no-configuration-cache --no-configure-on-demand --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g
       - name: Verify consumption from Central snapshots
         run: |
           ./gradlew -p ../../development/mingw/consumer \
             -PsnapshotRepository=https://central.sonatype.com/repository/maven-snapshots/ \
-            verifyForkDependencies linkDebugTestMingwX64 --refresh-dependencies --no-configuration-cache
+            verifyForkDependencies linkDebugTestMingwX64 --refresh-dependencies --no-configuration-cache --max-workers=2 -Pkotlin.daemon.jvmargs=-Xmx2g

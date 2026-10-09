@@ -50,6 +50,10 @@ gradle.projectsEvaluated {
     def stageTask = rootProject.tasks.register('stageMingwSnapshot')
     def publishTask = rootProject.tasks.register('publishMingwSnapshot')
     projects.each { p ->
+        // AndroidX API-history metadata compiles every platform; snapshots only need KMP metadata.
+        p.components.getByName('adhocKotlin').withVariantsFromConfiguration(
+            p.configurations.getByName('libraryVersionMetadata')
+        ) { skip() }
         def selected = p.publishing.publications.withType(MavenPublication).findAll {
             it.name in ['kotlinMultiplatform', 'mingwX64']
         }
